@@ -1,0 +1,9 @@
+# AI Review System (runtime artifacts in target repos)
+.review_state.yaml
+.review_history/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS
+.DS_Store
