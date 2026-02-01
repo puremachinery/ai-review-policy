@@ -10,7 +10,7 @@ This is the equivalent of asking a human reviewer to "just look at everything." 
 
 ## The Approach
 
-This repo provides a `REVIEW_POLICY.yaml` schema that decomposes "code review" into 27 discrete review types across 7 categories. An AI agent reads the policy file and executes reviews as separate, focused passes — each with its own scope, frequency, severity, and applicability conditions.
+This repo provides a `REVIEW_POLICY.yaml` schema that decomposes "code review" into 30 discrete review types across 8 categories. An AI agent reads the policy file and executes reviews as separate, focused passes — each with its own scope, frequency, severity, and applicability conditions.
 
 The result: instead of one shallow review, you get structured passes like "check all error handling paths" or "audit input validation" that go deeper because the agent isn't trying to do everything at once.
 
@@ -28,7 +28,7 @@ You could write a detailed review prompt every time. The policy file solves the 
 
 **State tracking prevents redundant work and catches regressions.** The agent records what it reviewed and when. A `weekly` review that ran 3 days ago is skipped. Code that changed since the last review gets re-examined. History files let the agent spot recurring issues across reviews.
 
-**Category batching keeps it practical.** 27 separate passes would be expensive. Reviews within the same category (e.g., all `correctness.*` checks) are batched into a single pass over the relevant files, with findings tracked separately. This gives you 7 focused passes instead of 27 redundant file reads.
+**Category batching keeps it practical.** 30 separate passes would be expensive. Reviews within the same category (e.g., all `correctness.*` checks) are batched into a single pass over the relevant files, with findings tracked separately. This gives you 8 focused passes instead of 30 redundant file reads.
 
 **Per-finding severity enables triage.** A review type has a default severity, but individual findings are tagged `[CRITICAL]`, `[HIGH]`, `[MEDIUM]`, or `[LOW]` based on actual impact. A correctness review might surface both a critical algorithm bug and a low-priority simplification opportunity — the severity tag distinguishes them.
 
@@ -74,12 +74,13 @@ Review security.secrets using REVIEW_POLICY.yaml
 | Category | Reviews | Default Frequency |
 |---|---|---|
 | **Correctness** | logic, edge_cases, error_handling, concurrency | every PR |
-| **Security** | input_validation, authn_authz, secrets, dependencies | every PR / weekly |
+| **Security** | input_validation, authn_authz, secrets, crypto, plugin_security, dependencies | every PR / weekly |
 | **Architecture** | api_design, abstractions, scalability, data_model, data_flow | every PR / monthly |
 | **Quality** | readability, test_coverage, documentation, style | every PR / weekly |
 | **Performance** | algorithmic, memory, io | every PR |
 | **Operational** | observability, configuration, deployment, failure_modes | every PR / weekly / monthly |
 | **Compliance** | licenses, regulatory, breaking_changes | every PR / quarterly |
+| **Feature** | status_verification | every PR |
 
 ## Schema Design
 
@@ -93,6 +94,7 @@ The policy schema supports:
 - **Documented evaluation order** — enabled > postponements > skip_if > only_if > change_triggers > frequency
 - **Dynamic state** — entries created as reviews execute, not pre-populated
 - **History retention** — auto-pruned by count (default 5 per type) or age (default 90 days)
+- **Feature verification** — optional `docs/feature-status.yaml` inventory and `docs/feature-evidence.yaml` evidence tracking to verify claimed feature completeness against runtime wiring and tests
 
 ## License
 

@@ -8,7 +8,8 @@ This file contains everything needed to set up a structured AI code review syste
 2. Create `.review_state.yaml` in the repo root (this file is NOT checked into git)
 3. Create `.review_history/` directory structure (this directory is NOT checked into git)
 4. Append the gitignore entries to the repo's `.gitignore`
-5. Inform the user which `project_flags` they should uncomment based on project characteristics
+5. If the user enables the `feature_verification` flag, create `docs/feature-status.yaml` and `docs/feature-evidence.yaml` (both checked into git)
+6. Inform the user which `project_flags` they should uncomment based on project characteristics
 
 ---
 
@@ -118,6 +119,38 @@ review_types:
       frequency: "every_pr"
       severity: "critical"
 
+    crypto:
+      description: "Key derivation, signature verification, HMAC usage, encryption correctness, timing safety"
+      enabled: true
+      frequency: "every_pr"
+      severity: "critical"
+      only_if:
+        - "has_crypto"
+      change_triggers:
+        - "**/integrity*"
+        - "**/signature*"
+        - "**/secrets*"
+        - "**/encrypt*"
+        - "**/crypto*"
+        - "**/hmac*"
+        - "**/hash*"
+        - "**/key*"
+
+    plugin_security:
+      description: "Plugin/extension sandbox enforcement, capability policy, signature trust, supply chain"
+      enabled: true
+      frequency: "every_pr"
+      severity: "critical"
+      only_if:
+        - "has_plugins"
+      change_triggers:
+        - "**/plugins/**"
+        - "**/extensions/**"
+        - "**/sandbox*"
+        - "**/signature*"
+        - "**/loader*"
+        - "**/runtime*"
+
     dependencies:
       description: "CVEs in dependencies, supply chain risks, outdated packages"
       enabled: true
@@ -166,6 +199,7 @@ review_types:
       severity: "high"
       only_if:
         - "has_database"
+        - "has_file_store"
       change_triggers:
         - "**/migrations/**"
         - "**/models/**"
@@ -182,6 +216,7 @@ review_types:
       severity: "high"
       only_if:
         - "has_database"
+        - "has_file_store"
         - "has_api"
         - "handles_pii"
 
@@ -302,6 +337,21 @@ review_types:
         - "library"
         - "public_api"
 
+  # ============================================================================
+  # FEATURE VERIFICATION
+  # ============================================================================
+  feature:
+    status_verification:
+      description: "Verify claimed feature completeness against feature-status.yaml and runtime wiring"
+      enabled: true
+      frequency: "every_pr"
+      severity: "high"
+      only_if:
+        - "feature_verification"
+      change_triggers:
+        - "docs/feature-status.yaml"
+        - "docs/feature-evidence.yaml"
+
 # ============================================================================
 # PROJECT FLAGS
 # Set these to control which reviews are skipped via skip_if / only_if
@@ -310,6 +360,10 @@ project_flags:
   - "has_api"
   - "has_database"
   # Uncomment flags that apply to this project:
+  # - "has_file_store"       # File-based storage (sessions, config, etc.)
+  # - "has_crypto"           # Cryptographic operations (HMAC, signatures, encryption)
+  # - "has_plugins"          # Plugin/extension system (WASM, dynamic loading, etc.)
+  # - "feature_verification" # Enforce feature status review from feature-status.yaml
   # - "prototype"
   # - "small_scale"
   # - "internal_only"
@@ -376,6 +430,8 @@ agent_instructions: |
        in a SINGLE pass over the relevant files
      - Report and track findings SEPARATELY per subcategory
      - Do NOT combine reviews across different categories into one pass
+     - For feature.status_verification, use docs/feature-status.yaml as the feature inventory and
+       require evidence for "complete" in docs/feature-evidence.yaml: runtime wiring, config surface, and tests
   8. Prioritize categories by highest severity among their due subcategories:
      critical > high > medium > low
   9. After completing reviews:
@@ -499,6 +555,8 @@ Create the following empty directory structure:
 ├── security.input_validation/
 ├── security.authn_authz/
 ├── security.secrets/
+├── security.crypto/
+├── security.plugin_security/
 ├── security.dependencies/
 ├── architecture.api_design/
 ├── architecture.abstractions/
@@ -518,7 +576,8 @@ Create the following empty directory structure:
 ├── operational.failure_modes/
 ├── compliance.licenses/
 ├── compliance.regulatory/
-└── compliance.breaking_changes/
+├── compliance.breaking_changes/
+└── feature.status_verification/
 ```
 
 History files are named: `{ISO_timestamp}_{short_sha}.md`
@@ -568,6 +627,72 @@ Minor input validation gaps in API endpoints. No critical issues but recommend a
 
 ---
 
+## File: docs/feature-status.yaml (optional)
+
+**Location:** `{repo_root}/docs/feature-status.yaml`
+**Git:** CHECK IN (feature inventory is part of the project record)
+**When:** Only create if `feature_verification` project flag is enabled
+
+```yaml
+# Feature status inventory for {project_name}.
+# Single-marker status scheme.
+version: "1.0"
+source: "single-marker verification scheme"
+
+status_legend:
+  "[ ]": "Not sure — believed done, not yet verified"
+  "[~]": "Partial — incomplete or missing behavior"
+  "[s]": "Stub — placeholder response only"
+  "[-]": "Verified missing — confirmed absent"
+  "[x]": "Verified done — confirmed working"
+
+feature_inventory_markdown: |
+  ## Feature Inventory
+
+  Comprehensive list of every feature in the system, grouped by module.
+  Markers follow the status_legend.
+
+  ### Module Name (`src/module/`)
+
+  - [ ] **Feature name** — brief description (`implementation_file.ext`)
+  - [x] **Another feature** — brief description (`file.ext`)
+  - [~] **Partial feature** — what works, what doesn't (`file.ext`)
+  - [-] **Missing feature** — confirmed not implemented
+  - [s] **Stubbed feature** — placeholder response only (`file.ext`)
+```
+
+---
+
+## File: docs/feature-evidence.yaml (optional)
+
+**Location:** `{repo_root}/docs/feature-evidence.yaml`
+**Git:** CHECK IN (evidence records are part of the project record)
+**When:** Only create if `feature_verification` project flag is enabled
+
+```yaml
+# Evidence for verified feature statuses (done/partial/missing).
+# Keep this focused on audited entries in docs/feature-status.yaml.
+
+version: "1.0"
+updated_at: null  # ISO date of last update
+
+features:
+  # Each entry documents evidence for a feature's claimed status.
+  # Required fields: feature, status
+  # Optional fields: runtime_wiring, tests, notes
+  #
+  # - feature: "descriptive feature name"
+  #   status: "verified_done"    # verified_done | partial | verified_missing
+  #   runtime_wiring:
+  #     - "src/path/to/file.ext (description of how feature is wired)"
+  #   tests:
+  #     - "src/path/to/test.ext::test_name"
+  #   notes:
+  #     - "Optional notes about caveats, limitations, or missing pieces"
+```
+
+---
+
 ## Final Directory Structure
 
 After setup, the repo should contain:
@@ -577,11 +702,14 @@ After setup, the repo should contain:
 ├── REVIEW_POLICY.yaml              # checked into git
 ├── .gitignore                      # checked in (with review entries appended)
 ├── .review_state.yaml              # gitignored
-└── .review_history/                # gitignored
-    ├── correctness.logic/
-    ├── correctness.edge_cases/
-    ├── ... (all review type subdirs)
-    └── compliance.breaking_changes/
+├── .review_history/                # gitignored
+│   ├── correctness.logic/
+│   ├── correctness.edge_cases/
+│   ├── ... (all review type subdirs)
+│   └── feature.status_verification/
+└── docs/                           # optional, if feature_verification enabled
+    ├── feature-status.yaml         # checked into git
+    └── feature-evidence.yaml       # checked into git
 ```
 
 ---
@@ -594,15 +722,19 @@ After creating the files, the setup agent should ask the user which flags apply 
 
 1. Does this project expose an API? -> `has_api`
 2. Does it use a database? -> `has_database`
-3. Is this a prototype/MVP? -> `prototype`
-4. Is it small-scale / personal project? -> `small_scale`
-5. Is it internal-only (not public)? -> `internal_only`
-6. Is it an internal tool (no external users)? -> `internal_tool`
-7. Does it have authentication/authorization? (if no: `no_auth`)
-8. Is it single-threaded / no concurrency? -> `single_threaded`, `no_concurrency`
-9. Is it a library consumed by others? -> `library`
-10. Does it have a public API contract? -> `public_api`
-11. Does it handle PII? -> `handles_pii`
-12. Does it handle payments? -> `handles_payments`
-13. Is it healthcare-related? -> `healthcare`
-14. Is it local-only (no deployment)? -> `local_only`, `no_deploy`
+3. Does it use file-based storage (sessions, config, etc.)? -> `has_file_store`
+4. Does it perform cryptographic operations (HMAC, signatures, encryption)? -> `has_crypto`
+5. Does it have a plugin/extension system? -> `has_plugins`
+6. Do you want to track and verify feature completeness? -> `feature_verification`
+7. Is this a prototype/MVP? -> `prototype`
+8. Is it small-scale / personal project? -> `small_scale`
+9. Is it internal-only (not public)? -> `internal_only`
+10. Is it an internal tool (no external users)? -> `internal_tool`
+11. Does it have authentication/authorization? (if no: `no_auth`)
+12. Is it single-threaded / no concurrency? -> `single_threaded`, `no_concurrency`
+13. Is it a library consumed by others? -> `library`
+14. Does it have a public API contract? -> `public_api`
+15. Does it handle PII? -> `handles_pii`
+16. Does it handle payments? -> `handles_payments`
+17. Is it healthcare-related? -> `healthcare`
+18. Is it local-only (no deployment)? -> `local_only`, `no_deploy`
