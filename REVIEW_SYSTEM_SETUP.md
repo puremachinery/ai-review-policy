@@ -20,8 +20,8 @@ This file contains everything needed to set up a structured AI code review syste
 
 ```yaml
 # REVIEW_POLICY.yaml
-# Drop this file in your repo root to guide AI agents on targeted code reviews.
-# Instead of "review this", agents should perform each enabled review type separately.
+# Structured AI code review policy — decomposes "review this" into focused, category-specific passes.
+# Schema, setup instructions, and docs: https://github.com/puremachinery/ai-review-policy
 
 version: "1.1"
 

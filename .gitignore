@@ -2,6 +2,9 @@
 .review_state.yaml
 .review_history/
 
+# Local working docs
+.local/
+
 # Claude Code local settings
 .claude/settings.local.json
 
